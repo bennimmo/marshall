@@ -1,21 +1,15 @@
 /**
- * Handles incoming HTTP GET requests.
- * Routes to either serving the HTML frontend or returning the waypoints JSON.
+ * Handles incoming HTTP GET requests. JSON API only.
  */
 function doGet(e) {
-  // If the frontend requests the waypoints via API
   if (e.parameter.action === 'getWaypoints') {
     const waypoints = getWaypointsList();
     return ContentService.createTextOutput(JSON.stringify({ status: 'success', data: waypoints }))
       .setMimeType(ContentService.MimeType.JSON);
   }
 
-  // Otherwise, serve the HTML Single Page Application
-  // (Requires an 'Index.html' file to be created in the Apps Script editor)
-  return HtmlService.createHtmlOutputFromFile('Index')
-    .setTitle('Event Scanner')
-    .addMetaTag('viewport', 'width=device-width, initial-scale=1')
-    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  return ContentService.createTextOutput(JSON.stringify({ status: 'error', message: 'Unknown action' }))
+    .setMimeType(ContentService.MimeType.JSON);
 }
 
 /**
@@ -57,18 +51,28 @@ function doPost(e) {
       }
     }
 
-    // 2. Append to Checkins sheet
-    // Format: Timestamp | ID | Name | Waypoint | Latitude | Longitude
+    // 2. Reject duplicate check-ins (same participant + same waypoint)
+    // Checkins format: Timestamp | ID | Name | Waypoint | Latitude | Longitude
+    const cData = checkinsSheet.getDataRange().getValues();
+    for (let i = 1; i < cData.length; i++) {
+      if (String(cData[i][1]).trim() === participantId &&
+          String(cData[i][3]).trim() === String(waypoint).trim()) {
+        return ContentService.createTextOutput(JSON.stringify({
+          status: "duplicate",
+          name: participantName,
+          waypoint: waypoint,
+          originalTimestamp: String(cData[i][0])
+        })).setMimeType(ContentService.MimeType.JSON);
+      }
+    }
+
+    // 3. Append to Checkins sheet
     checkinsSheet.appendRow([timestamp, participantId, participantName, waypoint, lat, lng]);
 
-    // 3. Return success response to the SPA
-    const response = {
+    return ContentService.createTextOutput(JSON.stringify({
       status: "success",
       name: participantName
-    };
-
-    return ContentService.createTextOutput(JSON.stringify(response))
-      .setMimeType(ContentService.MimeType.JSON);
+    })).setMimeType(ContentService.MimeType.JSON);
 
   } catch (error) {
     // Handle malformed JSON or other errors gracefully
