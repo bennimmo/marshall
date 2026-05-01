@@ -37,6 +37,59 @@
     .header {
       text-align: center;
       margin-bottom: 0.5rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .header h2 {
+      margin: 0;
+    }
+
+    /* Location status chip */
+    #loc-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.3rem 0.7rem;
+      font-size: 0.8rem;
+      font-weight: 600;
+      border-radius: 999px;
+      background: #e2e8f0;
+      color: #475569;
+    }
+
+    #loc-status[data-state="locating"] {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    #loc-status[data-state="active"] {
+      background: #dcfce7;
+      color: #166534;
+    }
+
+    #loc-status[data-state="error"] {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
+    #loc-status .dot {
+      width: 0.55rem;
+      height: 0.55rem;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    #loc-status[data-state="locating"] .dot,
+    #loc-status[data-state="active"] .dot {
+      animation: loc-pulse 1.4s ease-in-out infinite;
+    }
+
+    @keyframes loc-pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.35; }
     }
 
     .control-group {
@@ -156,6 +209,10 @@
   <div class="container">
     <div class="header">
       <h2>Marshal Scanner</h2>
+      <div id="loc-status" data-state="idle">
+        <span class="dot"></span>
+        <span class="text">Location off</span>
+      </div>
     </div>
 
     <div class="control-group">
@@ -190,11 +247,14 @@
 
     let html5QrCode;
     let isProcessing = false;
+    let lastCoords = null;
+    let locWatchId = null;
 
     // ==========================================
     // 2. INITIALISATION
     // ==========================================
     document.addEventListener("DOMContentLoaded", async () => {
+      initLocation();
       await loadWaypoints();
 
       // We no longer start the scanner automatically.
@@ -202,6 +262,36 @@
       document.getElementById('start-btn').addEventListener('click', initialiseScanner);
       document.getElementById('diag-btn').addEventListener('click', runDiagnostics);
     });
+
+    function setLocStatus(state, text) {
+      const el = document.getElementById('loc-status');
+      el.dataset.state = state;
+      el.querySelector('.text').textContent = text;
+    }
+
+    function initLocation() {
+      if (!navigator.geolocation) {
+        setLocStatus('error', 'Location unavailable');
+        return;
+      }
+      setLocStatus('locating', 'Locating…');
+      locWatchId = navigator.geolocation.watchPosition(
+        (pos) => {
+          lastCoords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+          setLocStatus('active', 'Location active');
+        },
+        (err) => {
+          if (err.code === err.PERMISSION_DENIED) {
+            setLocStatus('error', 'Location denied');
+          } else if (err.code === err.POSITION_UNAVAILABLE) {
+            setLocStatus('error', 'No GPS signal');
+          } else {
+            setLocStatus('error', 'Location unavailable');
+          }
+        },
+        { enableHighAccuracy: false, maximumAge: 30000, timeout: 20000 }
+      );
+    }
 
     async function runDiagnostics() {
       const out = document.getElementById('diag-out');
@@ -412,21 +502,24 @@
 
     function getLocationWithTimeout(timeoutMs) {
       return new Promise((resolve) => {
-        let timeoutId;
         const defaultCoords = { lat: "N/A", lng: "N/A" };
+
+        // The watcher started at page load usually has a fresh fix already.
+        if (lastCoords) return resolve(lastCoords);
 
         if (!navigator.geolocation) {
           return resolve(defaultCoords);
         }
 
-        timeoutId = setTimeout(() => resolve(defaultCoords), timeoutMs);
+        const timeoutId = setTimeout(() => resolve(defaultCoords), timeoutMs);
 
         navigator.geolocation.getCurrentPosition(
           (position) => {
             clearTimeout(timeoutId);
-            resolve({ lat: position.coords.latitude, lng: position.coords.longitude });
+            lastCoords = { lat: position.coords.latitude, lng: position.coords.longitude };
+            resolve(lastCoords);
           },
-          (error) => {
+          () => {
             clearTimeout(timeoutId);
             resolve(defaultCoords);
           },
