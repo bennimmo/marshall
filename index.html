@@ -88,8 +88,15 @@
     }
 
     @keyframes loc-pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.35; }
+
+      0%,
+      100% {
+        opacity: 1;
+      }
+
+      50% {
+        opacity: 0.35;
+      }
     }
 
     .control-group {
@@ -199,7 +206,7 @@
 <body>
 
   <div id="notification"><span id="notif-icon">✅</span> <span id="notif-text">Checked in:</span> <span
-      id="notif-name"></span></div>
+      id="notif-id"></span></div>
 
   <div id="loading">
     <div class="spinner"></div>
@@ -348,33 +355,63 @@
       log('\nDone.');
     }
 
+    const WAYPOINTS_CACHE_KEY = 'waypointsCache';
+
     async function loadWaypoints() {
       const select = document.getElementById('waypoint');
-      try {
-        const response = await fetch(`${API_URL}?action=getWaypoints`);
-        const json = await response.json();
-
-        if (json.status === 'success') {
-          select.innerHTML = '<option value="" disabled selected>Choose a waypoint...</option>';
-          json.data.forEach(wp => {
-            const option = document.createElement('option');
-            option.value = wp;
-            option.textContent = wp;
-            select.appendChild(option);
-          });
-
-          const savedWaypoint = localStorage.getItem('selectedWaypoint');
-          if (savedWaypoint) {
-            select.value = savedWaypoint;
-          }
-        }
-      } catch (error) {
-        select.innerHTML = '<option value="">Error loading waypoints</option>';
-      }
 
       select.addEventListener('change', (e) => {
         localStorage.setItem('selectedWaypoint', e.target.value);
       });
+
+      // 1. Render from localStorage immediately so the dropdown is usable
+      //    on slow networks / cold reloads.
+      const cached = readCachedWaypoints();
+      if (cached && cached.length) {
+        renderWaypoints(select, cached);
+      }
+
+      // 2. Refresh in the background; only re-render if the list actually changed.
+      try {
+        const response = await fetch(`${API_URL}?action=getWaypoints`);
+        const json = await response.json();
+        if (json.status !== 'success') throw new Error(json.message || 'Bad response');
+
+        const fresh = json.data;
+        if (JSON.stringify(fresh) !== JSON.stringify(cached || [])) {
+          localStorage.setItem(WAYPOINTS_CACHE_KEY, JSON.stringify(fresh));
+          renderWaypoints(select, fresh);
+        }
+      } catch (error) {
+        if (!cached || !cached.length) {
+          select.innerHTML = '<option value="">Error loading waypoints</option>';
+        }
+      }
+    }
+
+    function readCachedWaypoints() {
+      try {
+        const raw = localStorage.getItem(WAYPOINTS_CACHE_KEY);
+        if (!raw) return null;
+        const arr = JSON.parse(raw);
+        return Array.isArray(arr) ? arr : null;
+      } catch {
+        return null;
+      }
+    }
+
+    function renderWaypoints(select, list) {
+      const savedWaypoint = localStorage.getItem('selectedWaypoint');
+      select.innerHTML = '<option value="" disabled selected>Choose a waypoint...</option>';
+      list.forEach(wp => {
+        const option = document.createElement('option');
+        option.value = wp;
+        option.textContent = wp;
+        select.appendChild(option);
+      });
+      if (savedWaypoint && list.includes(savedWaypoint)) {
+        select.value = savedWaypoint;
+      }
     }
 
     function initialiseScanner() {
@@ -454,9 +491,9 @@
         const result = await response.json();
 
         if (result.status === 'success') {
-          showNotification(result.name, 'success');
+          showNotification(result.id, 'success');
         } else if (result.status === 'duplicate') {
-          showNotification(result.name, 'duplicate', result.waypoint);
+          showNotification(result.id, 'duplicate', result.waypoint);
         } else {
           alert(`Error: ${result.message}`);
         }
@@ -479,7 +516,7 @@
     // ==========================================
     // 4. UTILITIES
     // ==========================================
-    function showNotification(name, type, waypoint) {
+    function showNotification(id, type, waypoint) {
       const notif = document.getElementById('notification');
       notif.classList.remove('duplicate');
 
@@ -491,7 +528,7 @@
         document.getElementById('notif-icon').textContent = '✅';
         document.getElementById('notif-text').textContent = 'Checked in:';
       }
-      document.getElementById('notif-name').textContent = name;
+      document.getElementById('notif-id').textContent = id;
       notif.classList.add('show');
 
       const duration = type === 'duplicate' ? 4000 : 3000;

@@ -35,46 +35,32 @@ function doPost(e) {
     const timestamp = payload.timestamp || new Date().toISOString();
 
     const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const participantsSheet = ss.getSheetByName("Participants");
     const checkinsSheet = ss.getSheetByName("Checkins");
 
-    // 1. Look up the participant name
-    // Assuming Participants tab format: Column A = ID, Column B = Name
-    const pData = participantsSheet.getDataRange().getValues();
-    let participantName = "Unknown ID";
-
-    // Start loop from 1 to skip the header row
-    for (let i = 1; i < pData.length; i++) {
-      if (String(pData[i][0]).trim() === participantId) {
-        participantName = pData[i][1];
-        break;
-      }
-    }
-
-    // 2. Reject duplicate check-ins (same participant + same waypoint)
-    // Checkins format: Timestamp | ID | Name | Waypoint | Latitude | Longitude
+    // 1. Reject duplicate check-ins (same participant + same waypoint)
+    // Checkins format: Timestamp | ID | Waypoint | Latitude | Longitude
     const cData = checkinsSheet.getDataRange().getValues();
     for (let i = 1; i < cData.length; i++) {
       if (String(cData[i][1]).trim() === participantId &&
-          String(cData[i][3]).trim() === String(waypoint).trim()) {
+          String(cData[i][2]).trim() === String(waypoint).trim()) {
         return ContentService.createTextOutput(JSON.stringify({
           status: "duplicate",
-          name: participantName,
+          id: participantId,
           waypoint: waypoint,
           originalTimestamp: String(cData[i][0])
         })).setMimeType(ContentService.MimeType.JSON);
       }
     }
 
-    // 3. Append to Checkins sheet, then flush so the next request's
+    // 2. Append to Checkins sheet, then flush so the next request's
     //    duplicate scan can see this row immediately (otherwise Apps
     //    Script buffers the write and concurrent scans race).
-    checkinsSheet.appendRow([timestamp, participantId, participantName, waypoint, lat, lng]);
+    checkinsSheet.appendRow([timestamp, participantId, waypoint, lat, lng]);
     SpreadsheetApp.flush();
 
     return ContentService.createTextOutput(JSON.stringify({
       status: "success",
-      name: participantName
+      id: participantId
     })).setMimeType(ContentService.MimeType.JSON);
 
   } catch (error) {
