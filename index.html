@@ -223,9 +223,9 @@
     </div>
 
     <div class="control-group">
-      <label for="waypoint">Select Waypoint:</label>
-      <select id="waypoint">
-        <option value="">Loading waypoints...</option>
+      <label for="checkpoint">Select Checkpoint:</label>
+      <select id="checkpoint">
+        <option value="">Loading checkpoints...</option>
       </select>
     </div>
 
@@ -250,7 +250,7 @@
     // 1. CONFIGURATION
     // ==========================================
     // PASTE YOUR GOOGLE APPS SCRIPT WEB APP URL HERE:
-    const API_URL = "https://script.google.com/macros/s/AKfycbzONJQJFb1t1Zd6CpZHal1O-KIsCVaqYkTWSp2zSkWu9ra4rHDENGQBbeimUe0AAHSt/exec";
+    const API_URL = "https://script.google.com/macros/s/AKfycbyDGw0AO9TxM2BL1x2Sg3OUDm_9ELmYS2bECuvJTV66zuzXHBrMrpmcBVm0uGd4KLtT/exec";
 
     let html5QrCode;
     let isProcessing = false;
@@ -262,7 +262,7 @@
     // ==========================================
     document.addEventListener("DOMContentLoaded", async () => {
       initLocation();
-      await loadWaypoints();
+      await loadCheckpoints();
 
       // We no longer start the scanner automatically.
       // Instead, we bind it to the button tap.
@@ -355,43 +355,43 @@
       log('\nDone.');
     }
 
-    const WAYPOINTS_CACHE_KEY = 'waypointsCache';
+    const CHECKPOINTS_CACHE_KEY = 'checkpointsCache';
 
-    async function loadWaypoints() {
-      const select = document.getElementById('waypoint');
+    async function loadCheckpoints() {
+      const select = document.getElementById('checkpoint');
 
       select.addEventListener('change', (e) => {
-        localStorage.setItem('selectedWaypoint', e.target.value);
+        localStorage.setItem('selectedCheckpoint', e.target.value);
       });
 
       // 1. Render from localStorage immediately so the dropdown is usable
       //    on slow networks / cold reloads.
-      const cached = readCachedWaypoints();
+      const cached = readCachedCheckpoints();
       if (cached && cached.length) {
-        renderWaypoints(select, cached);
+        renderCheckpoints(select, cached);
       }
 
       // 2. Refresh in the background; only re-render if the list actually changed.
       try {
-        const response = await fetch(`${API_URL}?action=getWaypoints`);
+        const response = await fetch(`${API_URL}?action=getCheckpoints`);
         const json = await response.json();
         if (json.status !== 'success') throw new Error(json.message || 'Bad response');
 
         const fresh = json.data;
         if (JSON.stringify(fresh) !== JSON.stringify(cached || [])) {
-          localStorage.setItem(WAYPOINTS_CACHE_KEY, JSON.stringify(fresh));
-          renderWaypoints(select, fresh);
+          localStorage.setItem(CHECKPOINTS_CACHE_KEY, JSON.stringify(fresh));
+          renderCheckpoints(select, fresh);
         }
       } catch (error) {
         if (!cached || !cached.length) {
-          select.innerHTML = '<option value="">Error loading waypoints</option>';
+          select.innerHTML = '<option value="">Error loading checkpoints</option>';
         }
       }
     }
 
-    function readCachedWaypoints() {
+    function readCachedCheckpoints() {
       try {
-        const raw = localStorage.getItem(WAYPOINTS_CACHE_KEY);
+        const raw = localStorage.getItem(CHECKPOINTS_CACHE_KEY);
         if (!raw) return null;
         const arr = JSON.parse(raw);
         return Array.isArray(arr) ? arr : null;
@@ -400,17 +400,17 @@
       }
     }
 
-    function renderWaypoints(select, list) {
-      const savedWaypoint = localStorage.getItem('selectedWaypoint');
-      select.innerHTML = '<option value="" disabled selected>Choose a waypoint...</option>';
-      list.forEach(wp => {
+    function renderCheckpoints(select, list) {
+      const saved = localStorage.getItem('selectedCheckpoint');
+      select.innerHTML = '<option value="" disabled selected>Choose a checkpoint...</option>';
+      list.forEach(cp => {
         const option = document.createElement('option');
-        option.value = wp;
-        option.textContent = wp;
+        option.value = cp;
+        option.textContent = cp;
         select.appendChild(option);
       });
-      if (savedWaypoint && list.includes(savedWaypoint)) {
-        select.value = savedWaypoint;
+      if (saved && list.includes(saved)) {
+        select.value = saved;
       }
     }
 
@@ -461,9 +461,9 @@
     async function onScanSuccess(decodedText, decodedResult) {
       if (isProcessing) return;
 
-      const waypoint = document.getElementById('waypoint').value;
-      if (!waypoint) {
-        alert("Please select a waypoint first!");
+      const checkpoint = document.getElementById('checkpoint').value;
+      if (!checkpoint) {
+        alert("Please select a checkpoint first!");
         return;
       }
 
@@ -476,7 +476,7 @@
 
         const payload = {
           participantId: decodedText,
-          waypoint: waypoint,
+          checkpoint: checkpoint,
           latitude: coords.lat,
           longitude: coords.lng,
           timestamp: new Date().toISOString()
@@ -493,7 +493,7 @@
         if (result.status === 'success') {
           showNotification(result.id, 'success');
         } else if (result.status === 'duplicate') {
-          showNotification(result.id, 'duplicate', result.waypoint);
+          showNotification(result.id, 'duplicate', result.checkpoint);
         } else {
           alert(`Error: ${result.message}`);
         }
@@ -516,14 +516,14 @@
     // ==========================================
     // 4. UTILITIES
     // ==========================================
-    function showNotification(id, type, waypoint) {
+    function showNotification(id, type, checkpoint) {
       const notif = document.getElementById('notification');
       notif.classList.remove('duplicate');
 
       if (type === 'duplicate') {
         notif.classList.add('duplicate');
         document.getElementById('notif-icon').textContent = '⚠️';
-        document.getElementById('notif-text').textContent = `Already checked in at ${waypoint}:`;
+        document.getElementById('notif-text').textContent = `Already checked in at ${checkpoint}:`;
       } else {
         document.getElementById('notif-icon').textContent = '✅';
         document.getElementById('notif-text').textContent = 'Checked in:';

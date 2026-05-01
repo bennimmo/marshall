@@ -2,9 +2,9 @@
  * Handles incoming HTTP GET requests. JSON API only.
  */
 function doGet(e) {
-  if (e.parameter.action === 'getWaypoints') {
-    const waypoints = getWaypointsList();
-    return ContentService.createTextOutput(JSON.stringify({ status: 'success', data: waypoints }))
+  if (e.parameter.action === 'getCheckpoints') {
+    const checkpoints = getCheckpointsList();
+    return ContentService.createTextOutput(JSON.stringify({ status: 'success', data: checkpoints }))
       .setMimeType(ContentService.MimeType.JSON);
   }
 
@@ -29,7 +29,7 @@ function doPost(e) {
     // Parse the incoming JSON payload
     const payload = JSON.parse(e.postData.contents);
     const participantId = String(payload.participantId).trim();
-    const waypoint = payload.waypoint;
+    const checkpoint = payload.checkpoint;
     const lat = payload.latitude || "N/A";
     const lng = payload.longitude || "N/A";
     const timestamp = payload.timestamp || new Date().toISOString();
@@ -37,16 +37,16 @@ function doPost(e) {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const checkinsSheet = ss.getSheetByName("Checkins");
 
-    // 1. Reject duplicate check-ins (same participant + same waypoint)
-    // Checkins format: Timestamp | ID | Waypoint | Latitude | Longitude
+    // 1. Reject duplicate check-ins (same participant + same checkpoint)
+    // Checkins format: Timestamp | ID | Checkpoint | Latitude | Longitude
     const cData = checkinsSheet.getDataRange().getValues();
     for (let i = 1; i < cData.length; i++) {
       if (String(cData[i][1]).trim() === participantId &&
-          String(cData[i][2]).trim() === String(waypoint).trim()) {
+          String(cData[i][2]).trim() === String(checkpoint).trim()) {
         return ContentService.createTextOutput(JSON.stringify({
           status: "duplicate",
           id: participantId,
-          waypoint: waypoint,
+          checkpoint: checkpoint,
           originalTimestamp: String(cData[i][0])
         })).setMimeType(ContentService.MimeType.JSON);
       }
@@ -55,7 +55,7 @@ function doPost(e) {
     // 2. Append to Checkins sheet, then flush so the next request's
     //    duplicate scan can see this row immediately (otherwise Apps
     //    Script buffers the write and concurrent scans race).
-    checkinsSheet.appendRow([timestamp, participantId, waypoint, lat, lng]);
+    checkinsSheet.appendRow([timestamp, participantId, checkpoint, lat, lng]);
     SpreadsheetApp.flush();
 
     return ContentService.createTextOutput(JSON.stringify({
@@ -74,22 +74,22 @@ function doPost(e) {
 }
 
 /**
- * Helper function to extract waypoints from the spreadsheet.
+ * Helper function to extract checkpoints from the spreadsheet.
  */
-function getWaypointsList() {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Waypoints");
+function getCheckpointsList() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Checkpoints");
   if (!sheet) return [];
 
   const data = sheet.getDataRange().getValues();
-  const waypoints = [];
+  const checkpoints = [];
 
-  // Assuming Waypoints tab format: Column A = Waypoint Name
+  // Assuming Checkpoints tab format: Column A = Checkpoint Name
   // Start loop from 1 to skip the header row
   for (let i = 1; i < data.length; i++) {
     if (data[i][0] !== "") {
-      waypoints.push(String(data[i][0]).trim());
+      checkpoints.push(String(data[i][0]).trim());
     }
   }
 
-  return waypoints;
+  return checkpoints;
 }
