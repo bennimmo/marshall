@@ -66,8 +66,11 @@ function doPost(e) {
       }
     }
 
-    // 3. Append to Checkins sheet
+    // 3. Append to Checkins sheet, then flush so the next request's
+    //    duplicate scan can see this row immediately (otherwise Apps
+    //    Script buffers the write and concurrent scans race).
     checkinsSheet.appendRow([timestamp, participantId, participantName, waypoint, lat, lng]);
+    SpreadsheetApp.flush();
 
     return ContentService.createTextOutput(JSON.stringify({
       status: "success",
