@@ -108,6 +108,11 @@
     </button>
 
     <div id="reader"></div>
+
+    <button id="diag-btn" style="padding: 10px; font-size: 0.9rem; background-color: #64748b; color: white; border: none; border-radius: 8px;">
+      🔧 Run camera diagnostics
+    </button>
+    <pre id="diag-out" style="white-space: pre-wrap; word-break: break-word; background: #0f172a; color: #e2e8f0; padding: 0.75rem; border-radius: 8px; font-size: 0.8rem; display: none;"></pre>
   </div>
 
   <script>
@@ -125,11 +130,67 @@
     // ==========================================
     document.addEventListener("DOMContentLoaded", async () => {
       await loadWaypoints();
-      
+
       // We no longer start the scanner automatically.
       // Instead, we bind it to the button tap.
       document.getElementById('start-btn').addEventListener('click', initialiseScanner);
+      document.getElementById('diag-btn').addEventListener('click', runDiagnostics);
     });
+
+    async function runDiagnostics() {
+      const out = document.getElementById('diag-out');
+      out.style.display = 'block';
+      const lines = [];
+      const log = (s) => { lines.push(s); out.textContent = lines.join('\n'); };
+
+      log('— Environment —');
+      log('URL: ' + location.href);
+      log('isSecureContext: ' + window.isSecureContext);
+      log('userAgent: ' + navigator.userAgent);
+      log('mediaDevices present: ' + !!navigator.mediaDevices);
+      log('getUserMedia present: ' + !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia));
+      log('inIframe: ' + (window.self !== window.top));
+
+      log('\n— Permissions API —');
+      try {
+        const p = await navigator.permissions.query({ name: 'camera' });
+        log('camera permission state: ' + p.state);
+      } catch (e) {
+        log('permissions.query failed: ' + e.name + ' — ' + e.message);
+      }
+
+      log('\n— enumerateDevices (labels empty until granted) —');
+      try {
+        const devs = await navigator.mediaDevices.enumerateDevices();
+        const cams = devs.filter(d => d.kind === 'videoinput');
+        log('videoinput count: ' + cams.length);
+        cams.forEach((c, i) => log(`  [${i}] label="${c.label}" id=${c.deviceId.slice(0,8)}…`));
+      } catch (e) {
+        log('enumerateDevices failed: ' + e.name + ' — ' + e.message);
+      }
+
+      log('\n— Test 1: getUserMedia({video: true}) —');
+      try {
+        const s = await navigator.mediaDevices.getUserMedia({ video: true });
+        log('OK — got stream with ' + s.getVideoTracks().length + ' track(s)');
+        s.getVideoTracks().forEach(t => log('  track: ' + t.label));
+        s.getTracks().forEach(t => t.stop());
+      } catch (e) {
+        log('FAILED: ' + e.name + ' — ' + e.message);
+      }
+
+      log('\n— Test 2: getUserMedia({video:{facingMode:"environment"}}) —');
+      try {
+        const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } } });
+        log('OK — got stream with ' + s.getVideoTracks().length + ' track(s)');
+        s.getVideoTracks().forEach(t => log('  track: ' + t.label));
+        s.getTracks().forEach(t => t.stop());
+      } catch (e) {
+        log('FAILED: ' + e.name + ' — ' + e.message);
+      }
+
+      log('\nDone.');
+    }
 
     async function loadWaypoints() {
       const select = document.getElementById('waypoint');
@@ -170,11 +231,34 @@
       // Start the back camera
       html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess)
         .catch(err => {
-          // NEW: This will pop up on your phone screen if it fails,
-          // telling us exactly why the browser blocked it.
-          alert("Camera Error: " + err);
-          document.getElementById('start-btn').style.display = 'block'; // Show button again
+          alert("Camera Error: " + explainCameraError(err));
+          document.getElementById('start-btn').style.display = 'block';
         });
+    }
+
+    function explainCameraError(err) {
+      const name = (err && err.name) || '';
+      const msg = (err && err.message) || String(err);
+
+      if (!window.isSecureContext) {
+        return "Page is not served over HTTPS. Camera access requires https:// (or localhost). Check the address bar.";
+      }
+      if (name === 'NotAllowedError' || /Permission denied/i.test(msg)) {
+        return "Camera permission is blocked for this site.\n\n" +
+               "Fix on Android Chrome:\n" +
+               "1. Tap the lock icon left of the URL\n" +
+               "2. Permissions → Camera → Allow (or Reset)\n" +
+               "3. Reload the page\n\n" +
+               "Also check: Android Settings → Apps → Chrome → Permissions → Camera is allowed, and you're not opening this inside an in-app browser (Slack/Gmail/etc.) — use 'Open in Chrome'.\n\n" +
+               "Raw: " + msg;
+      }
+      if (name === 'NotFoundError' || name === 'OverconstrainedError') {
+        return "No suitable back camera found on this device.\n\nRaw: " + msg;
+      }
+      if (name === 'NotReadableError') {
+        return "Camera is in use by another app. Close other camera apps and retry.\n\nRaw: " + msg;
+      }
+      return msg;
     }
 
     // ==========================================
