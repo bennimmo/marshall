@@ -84,11 +84,49 @@
     #notification.show {
       opacity: 1;
     }
+    /* Loading Overlay */
+    #loading {
+      position: fixed;
+      inset: 0;
+      background-color: rgba(15, 23, 42, 0.85);
+      color: white;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1.25rem;
+      z-index: 1100;
+      backdrop-filter: blur(2px);
+    }
+    #loading.show {
+      display: flex;
+    }
+    #loading .spinner {
+      width: 64px;
+      height: 64px;
+      border: 6px solid rgba(255, 255, 255, 0.25);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.9s linear infinite;
+    }
+    #loading .label {
+      font-size: 1.25rem;
+      font-weight: bold;
+      letter-spacing: 0.02em;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
   </style>
 </head>
 <body>
 
   <div id="notification">✅ Checked in: <span id="notif-name"></span></div>
+
+  <div id="loading">
+    <div class="spinner"></div>
+    <div class="label">Checking in…</div>
+  </div>
 
   <div class="container">
     <div class="header">
@@ -246,10 +284,11 @@
       if (name === 'NotAllowedError' || /Permission denied/i.test(msg)) {
         return "Camera permission is blocked for this site.\n\n" +
                "Fix on Android Chrome:\n" +
-               "1. Tap the lock icon left of the URL\n" +
-               "2. Permissions → Camera → Allow (or Reset)\n" +
-               "3. Reload the page\n\n" +
-               "Also check: Android Settings → Apps → Chrome → Permissions → Camera is allowed, and you're not opening this inside an in-app browser (Slack/Gmail/etc.) — use 'Open in Chrome'.\n\n" +
+               "1. Tap the lock/tune icon left of the URL\n" +
+               "2. Tap Permissions (or Site settings)\n" +
+               "3. If Camera is listed → set to Allow\n" +
+               "   If Camera is NOT listed → tap 'Reset permissions' / 'Clear & reset' at the bottom\n" +
+               "4. Close the tab, reopen the URL, and tap the scanner button again\n\n" +
                "Raw: " + msg;
       }
       if (name === 'NotFoundError' || name === 'OverconstrainedError') {
@@ -274,7 +313,8 @@
       }
 
       isProcessing = true;
-      html5QrCode.pause(); 
+      html5QrCode.pause();
+      showLoading(true);
 
       try {
         const coords = await getLocationWithTimeout(3000);
@@ -304,11 +344,16 @@
       } catch (error) {
         alert("Network error. Please try again.");
       } finally {
+        showLoading(false);
         setTimeout(() => {
           isProcessing = false;
           html5QrCode.resume();
-        }, 1500); 
+        }, 1500);
       }
+    }
+
+    function showLoading(on) {
+      document.getElementById('loading').classList.toggle('show', on);
     }
 
     // ==========================================
