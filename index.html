@@ -260,14 +260,14 @@
     // ==========================================
     // 2. INITIALISATION
     // ==========================================
-    document.addEventListener("DOMContentLoaded", async () => {
-      initLocation();
-      await loadCheckpoints();
-
-      // We no longer start the scanner automatically.
-      // Instead, we bind it to the button tap.
+    document.addEventListener("DOMContentLoaded", () => {
+      // Bind controls FIRST so the scanner button works the instant the
+      // page is interactive — don't wait for the checkpoints fetch.
       document.getElementById('start-btn').addEventListener('click', initialiseScanner);
       document.getElementById('diag-btn').addEventListener('click', runDiagnostics);
+
+      initLocation();
+      loadCheckpoints();
     });
 
     function setLocStatus(state, text) {
